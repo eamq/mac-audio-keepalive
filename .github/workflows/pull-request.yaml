@@ -1,0 +1,40 @@
+name: Pull Request CI
+
+on: pull_request
+
+jobs:
+  lint-and-test:
+    name: Lint & Test (macOS Apple Silicon)
+    runs-on: macos-14 # Apple Silicon (arm64)
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@7b231d683693e506e1273e911eb31a8fddf0b9f1 # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install ShellCheck & BATS
+        run: brew install shellcheck bats-core
+
+      - name: Check Formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy (Linter)
+        run: cargo clippy -- -D warnings
+
+      - name: Shell Script Static Analysis
+        run: shellcheck scripts/*.sh
+
+      - name: Run Cargo Tests
+        run: cargo test --release
+
+      - name: Validate launchd Plist Format
+        run: plutil -lint com.user.mac-audio-keepalive.plist
+
+      - name: Test Installation Script Dry Run
+        env:
+          DRY_RUN: 1
+        run: ./scripts/install.sh --dry-run || true
