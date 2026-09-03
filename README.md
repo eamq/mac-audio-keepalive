@@ -2,7 +2,7 @@
 
 An ultra-lightweight, native macOS background daemon written in Rust that prevents digital active speakers, USB desktop monitors, and audio bridges from entering power-saving sleep mode.
 
-It streams a continuous, in-audible silent PCM stream directly to the macOS CoreAudio Hardware Abstraction Layer (HAL) Default Output Unit—eliminating transient wake-up delays and audio popping without consuming measurable CPU or power resources.
+It streams a continuous, inaudible silent PCM stream directly to the macOS CoreAudio Hardware Abstraction Layer (HAL) Default Output Unit, eliminating transient wake-up delays and audio popping without consuming measurable CPU or power resources.
 
 ## Problem Statement
 
@@ -21,13 +21,18 @@ macOS CoreAudio aggressively powers down USB audio bus streams after 3–5 secon
 - **macOS:** 11.0 (Big Sur) or newer.
 - **Architecture:** Apple Silicon (`aarch64-apple-darwin`) or Intel (`x86_64-apple-darwin`).
 - **Toolchain:** [Rust & Cargo](https://www.rust-lang.org/tools/install) (Stable Edition 2021 or newer).
+- **Xcode Command Line Tools**: Required for `git` and building Rust crates with native macOS system headers (CoreAudio framework).
+
+```bash
+xcode-select --install
+```
 
 ### Automated Setup
 
 Clone the repository and run the setup script. This compiles the optimized release binary, installs it to `/usr/local/bin/mac-audio-keepalive`, and boots the `launchd` service.
 
 ```bash
-git clone [https://github.com/eamq/mac-audio-keepalive.git](https://github.com/eamq/mac-audio-keepalive.git)
+git clone https://github.com/eamq/mac-audio-keepalive.git
 cd mac-audio-keepalive
 ./scripts/install.sh
 ```
@@ -64,22 +69,22 @@ cargo build --release
 
 ```mermaid
 graph TD
-    HAL[macOS CoreAudio HAL] -->|Hardware Clock Interrupt ~10ms| RTThread
+  HAL[macOS CoreAudio HAL] -->|Hardware Clock Interrupt ~10ms| RTThread
 
-    subgraph Daemon [mac-audio-keepalive Background Daemon]
-        direction TB
+  subgraph Daemon [mac-audio-keepalive Background Daemon]
+    direction TB
 
-        subgraph RTThread [Real-Time Render Callback]
-            direction TB
-            Alloc[Memory Allocation: 0 Heap Allocations] --> Exec[silence::clear_buffer: Memset Digital Silence]
-        end
-
-        subgraph MainThread [Main Thread & Lifecycle]
-            direction TB
-            QoS[QoS Class: QOS_CLASS_BACKGROUND] --> Sig[signal-hook: SIGINT / SIGTERM Selector]
-            Sig --> Park[Kernel Sleep / 0.0% CPU]
-        end
+    subgraph RTThread [Real-Time Render Callback]
+      direction TB
+      Alloc[Memory Allocation: 0 Heap Allocations] --> Exec[silence::clear_buffer: Memset Digital Silence]
     end
+
+    subgraph MainThread [Main Thread & Lifecycle]
+      direction TB
+      QoS[QoS Class: QOS_CLASS_BACKGROUND] --> Sig[signal-hook: SIGINT / SIGTERM Selector]
+      Sig --> Park[Kernel Sleep / 0.0% CPU]
+    end
+  end
 ```
 
 - **Zero-Allocation Real-time Thread:** The callback executes inside the OS high-priority audio render thread driven by hardware clock interrupts. It uses direct raw memory zeroes (`silence::clear_buffer`) without vector/slice bounds checks, locks, or heap allocations.
