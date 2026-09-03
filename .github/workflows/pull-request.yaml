@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@7b231d683693e506e1273e911eb31a8fddf0b9f1 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
