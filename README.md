@@ -88,7 +88,7 @@ graph TD
 ```
 
 - **Zero-Allocation Real-time Thread:** The callback executes inside the OS high-priority audio render thread driven by hardware clock interrupts. It uses direct raw memory zeroes (`silence::clear_buffer`) without vector/slice bounds checks, locks, or heap allocations.
-- **E-Core Pinning:** The process sets `QOS_CLASS_BACKGROUND` via `pthread_set_qos_class_self_np`, ensuring any initialization or non-interrupt processing runs exclusively on Apple Silicon Energy Cores (E-Cores).
+- **E-Core Pinning:** The process sets `QOS_CLASS_BACKGROUND` via `pthread_set_qos_class_self_np`, ensuring any initialization or non-interrupt processing runs exclusively on Apple Silicon efficiency cores (E-Cores).
 - **Graceful Lifecycle Teardown:** Listens for `SIGINT` and `SIGTERM` via POSIX signal channels (`signal-hook`). When `launchd` stops the service, the main thread wakes to uninitialize the CoreAudio hardware pipeline cleanly (`AudioOutputUnitStop` / `AudioComponentInstanceDispose`).
 - **Zero CPU Polling:** Main thread sleeps directly on OS kernel selectors via `signals.forever()`. Execution is entirely event-driven by incoming HAL interrupts.
 - **OS Power Management Compliance:** Does not hold power assertions or prevent system sleep. When macOS enters display or system sleep, the HAL clock halts, freezing `mac-audio-keepalive` without battery drain.
