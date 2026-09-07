@@ -1,13 +1,14 @@
 use coreaudio_sys::{
     kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatLinearPCM,
-    kAudioUnitManufacturer_Apple, kAudioUnitProperty_SetRenderCallback,
-    kAudioUnitProperty_StreamFormat, kAudioUnitScope_Global, kAudioUnitScope_Input,
-    kAudioUnitSubType_DefaultOutput, kAudioUnitType_Output, noErr, AURenderCallbackStruct,
-    AudioBuffer, AudioBufferList, AudioComponent, AudioComponentDescription,
-    AudioComponentFindNext, AudioComponentInstanceDispose, AudioComponentInstanceNew,
-    AudioOutputUnitStart, AudioOutputUnitStop, AudioStreamBasicDescription, AudioTimeStamp,
-    AudioUnit, AudioUnitInitialize, AudioUnitRenderActionFlags, AudioUnitSetProperty,
-    AudioUnitUninitialize, OSStatus, UInt32,
+    kAudioOutputUnitProperty_EnableIO, kAudioUnitManufacturer_Apple,
+    kAudioUnitProperty_SetRenderCallback, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Global,
+    kAudioUnitScope_Input, kAudioUnitScope_Output, kAudioUnitSubType_DefaultOutput,
+    kAudioUnitType_Output, noErr, AURenderCallbackStruct, AudioBuffer, AudioBufferList,
+    AudioComponent, AudioComponentDescription, AudioComponentFindNext,
+    AudioComponentInstanceDispose, AudioComponentInstanceNew, AudioOutputUnitStart,
+    AudioOutputUnitStop, AudioStreamBasicDescription, AudioTimeStamp, AudioUnit,
+    AudioUnitInitialize, AudioUnitRenderActionFlags, AudioUnitSetProperty, AudioUnitUninitialize,
+    OSStatus, UInt32,
 };
 use mac_audio_keepalive::silence;
 use signal_hook::consts::signal::{SIGINT, SIGTERM};
@@ -55,18 +56,18 @@ unsafe extern "C" fn render_callback(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Initializing mac-audio-keepalive daemon...");
 
-    // 1. Force host process QoS to BACKGROUND (scheduled exclusively on Apple Silicon E-Cores)
+    // Force host process QoS to BACKGROUND (scheduled exclusively on Apple Silicon E-Cores)
     unsafe {
         libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
     }
 
-    // 2. Set up POSIX Signal Hook Iterator for graceful termination
+    // Set up POSIX Signal Hook Iterator for graceful termination
     let mut signals: Signals = Signals::new([SIGINT, SIGTERM])?;
 
     let mut instance: AudioUnit = ptr::null_mut();
 
     unsafe {
-        // 3. Locate Default Output Audio Component
+        // Locate Default Output Audio Component
         let desc: AudioComponentDescription = AudioComponentDescription {
             componentType: kAudioUnitType_Output,
             componentSubType: kAudioUnitSubType_DefaultOutput,
@@ -85,7 +86,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("AudioComponentInstanceNew failed with status: {}", status).into());
         }
 
-        // 4. Configure PCM Stream Format
+        // Explicitly disable input IO (prevents asking for microphone permission)
+        let disable_input: UInt32 = 0;
+        let disable_input_status = AudioUnitSetProperty(
+            instance,
+            kAudioOutputUnitProperty_EnableIO,
+            kAudioUnitScope_Input,
+            1, // Input element
+            &disable_input as *const _ as *const _,
+            std::mem::size_of::<UInt32>() as UInt32,
+        );
+        if disable_input_status != noErr as OSStatus {
+            return Err(format!("Failed to disable input IO: {}", disable_input_status).into());
+        }
+
+        // Explicitly enable output IO
+        let enable_output: UInt32 = 1;
+        let enable_output_status = AudioUnitSetProperty(
+            instance,
+            kAudioOutputUnitProperty_EnableIO,
+            kAudioUnitScope_Output,
+            0, // Output element
+            &enable_output as *const _ as *const _,
+            std::mem::size_of::<UInt32>() as UInt32,
+        );
+        if enable_output_status != noErr as OSStatus {
+            return Err(format!("Failed to enable output IO: {}", enable_output_status).into());
+        }
+
+        // Configure PCM Stream Format
         let stream_format: AudioStreamBasicDescription = AudioStreamBasicDescription {
             mSampleRate: SAMPLE_RATE_HZ,
             mFormatID: kAudioFormatLinearPCM,
@@ -110,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("Failed to set stream format: {}", set_format_status).into());
         }
 
-        // 5. Attach High-Frequency Render Callback
+        // Attach High-Frequency Render Callback
         let callback_struct: AURenderCallbackStruct = AURenderCallbackStruct {
             inputProc: Some(render_callback),
             inputProcRefCon: ptr::null_mut(),
@@ -128,7 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("Failed to set render callback: {}", set_callback_status).into());
         }
 
-        // 6. Initialize Hardware Pipeline & Start Stream
+        // Initialize Hardware Pipeline & Start Stream
         AudioUnitInitialize(instance);
         AudioOutputUnitStart(instance);
     }
