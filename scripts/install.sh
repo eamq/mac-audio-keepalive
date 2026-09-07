@@ -47,7 +47,7 @@ echo "Installing launchd plist to $PLIST_DEST..."
 run_cmd cp "$PLIST_NAME" "$PLIST_DEST"
 
 echo "Loading launchd service..."
-run_cmd launchctl bootout "gui/$USER_ID/$PLIST_NAME" 2>/dev/null || true
+run_cmd launchctl bootout "gui/$USER_ID" "$PLIST_DEST" 2>/dev/null || true
 run_cmd launchctl bootstrap "gui/$USER_ID" "$PLIST_DEST"
 
 echo "Installation complete."
