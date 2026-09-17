@@ -1,6 +1,6 @@
 use coreaudio_sys::{
     kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatLinearPCM,
-    kAudioOutputUnitProperty_EnableIO, kAudioUnitManufacturer_Apple,
+    kAudioOutputUnitProperty_EnableIO, kAudioUnitErr_InvalidProperty, kAudioUnitManufacturer_Apple,
     kAudioUnitProperty_SetRenderCallback, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Global,
     kAudioUnitScope_Input, kAudioUnitScope_Output, kAudioUnitSubType_DefaultOutput,
     kAudioUnitType_Output, noErr, AURenderCallbackStruct, AudioBuffer, AudioBufferList,
@@ -22,6 +22,12 @@ const STEREO_CHANNEL_COUNT: UInt32 = 2;
 const BITS_PER_CHANNEL: UInt32 = 32;
 const BYTES_PER_SAMPLE: UInt32 = BITS_PER_CHANNEL / 8; // 4 bytes (f32)
 const BYTES_PER_FRAME: UInt32 = BYTES_PER_SAMPLE * STEREO_CHANNEL_COUNT; // 8 bytes
+
+/// `kAudioUnitErr_InvalidProperty` (-10879).
+/// Returned by macOS 27+ when attempting to set `kAudioOutputUnitProperty_EnableIO`
+/// on `kAudioUnitScope_Input` (Element 1) for `kAudioUnitSubType_DefaultOutput`,
+/// since output-only units do not own or expose input streams.
+const K_AUDIO_UNIT_ERR_INVALID_PROPERTY: OSStatus = -10879;
 
 /// Real-time CoreAudio Render Callback.
 /// Executes on the high-priority OS audio thread driven by hardware clock interrupts.
@@ -96,7 +102,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &disable_input as *const _ as *const _,
             std::mem::size_of::<UInt32>() as UInt32,
         );
-        if disable_input_status != noErr as OSStatus {
+        if disable_input_status != noErr as OSStatus
+            && disable_input_status != kAudioUnitErr_InvalidProperty as OSStatus
+            && disable_input_status != K_AUDIO_UNIT_ERR_INVALID_PROPERTY
+        {
             return Err(format!("Failed to disable input IO: {}", disable_input_status).into());
         }
 
